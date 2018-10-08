@@ -54,31 +54,31 @@ void main(int argc, char* argv[]) {
   
   pthread_t write_thread;
   if (ret =  pthread_create(&write_thread, NULL, write_main, NULL)) {
-    printf("Error creating threaf: %\n",ret);
+    printf("Error creating thread: %\n",ret);
     exit(1);
   }
 
   pthread_join(write_thread,NULL);
+  free(roots);
+  free(iterations);
+  free(exact_roots);
+  free(item_done);
 }
 
 void compute_exact_roots() {
-  double angle;
-  double complex * a = malloc(sizeof(double complex) * (exponent + 1));
-  for (size_t ix = 0; ix < exponent; ++ix) {
-    angle = (2 / (double) exponent) * ix  * M_PI;
-    a[ix] = cos(angle) + sin(angle)*I;
-  }
-  a[exponent] = 0;
-  exact_roots = a;
+  double angle = M_PI * 2.0 / exponent;
+  double complex * tmp_exact_roots = malloc(sizeof(double complex) * (exponent + 1));
+  for (size_t ix = 0; ix < exponent; ++ix)
+    tmp_exact_roots[ix] = cos(angle*ix) + sin(angle*ix)*I;
+  tmp_exact_roots[exponent] = 0;
+  exact_roots = tmp_exact_roots;
 }
 
 void * compute_main(void * args) {
-  size_t offset = *((size_t*)args);
+  size_t ix = *((size_t*)args);
   free(args);
-  
-  for (size_t ix = offset; ix < size; ix += nmb_threads ) {
+  for (; ix < size; ix += nmb_threads) {
     compute_item(ix);
-    printf("Klar med item %d\n",ix);
     pthread_mutex_lock(&item_done_mutex);
     item_done[ix] = 1;
     pthread_mutex_unlock(&item_done_mutex);
@@ -86,12 +86,12 @@ void * compute_main(void * args) {
 }
 
 void compute_item(int item) {
-  int * roots_result = malloc(sizeof(int) * size);
+  int *      roots_result = malloc(sizeof(int) * size);
   int * iterations_result = malloc(sizeof(int) * size);
-  double step = 4 / (double) (size-1);
-  double complex yI = (-2 + item*step)*I;
+  double step = 4.0 / (size-1);
+  double complex y_I = (-2 + item*step)*I;
   for (size_t ix = 0; ix < size; ++ix) {
-    double complex z = -2 + ix*step + yI;
+    double complex z = -2 + ix*step + y_I;
     int done = 0;
     if (z == 0) {
       roots_result[ix] = exponent;
@@ -123,7 +123,7 @@ void compute_item(int item) {
 
 void * write_main(void * args) {
   char * item_done_loc = calloc(size, sizeof(char));
-  struct timespec sleep_timespec = {.tv_sec = 0, .tv_nsec = 500L};
+  struct timespec sleep_timespec = {.tv_sec = 0, .tv_nsec = 500};
   char * intro_string = "P3 \n%d %d \n255 \n";
   char * template_string = "%3d %3d %3d ";
   char tmp_string[30];
@@ -132,8 +132,8 @@ void * write_main(void * args) {
   sprintf(tmp_string, "newton_attractors_x%d.ppm", exponent);
   FILE * f_iterations = fopen(tmp_string,"w+");
   sprintf(tmp_string,intro_string,size,size);
-  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_roots);
-  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_iterations);
+  fwrite(tmp_string,sizeof(char),100,f_roots);
+  fwrite(tmp_string,sizeof(char),100,f_iterations);
   for (size_t ix = 0; ix < size;) {
     pthread_mutex_lock(&item_done_mutex);
     if (item_done[ix] != 0) {
@@ -153,16 +153,15 @@ void * write_main(void * args) {
       for (size_t jx = 0; jx < size; ++jx) {
 	int rcol = roots_results[jx]/(double)exponent*255;
 	sprintf(tmp_string,template_string,rcol,rcol,rcol);
-	fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_roots);
-	int icol = roots_results[jx]/(double)50*255;
+	fwrite(tmp_string,sizeof(char),100,f_roots);
+	int icol = roots_results[jx]/50.0*255;
 	sprintf(tmp_string,template_string,icol,icol,icol);
-       	fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_iterations); 
+       	fwrite(tmp_string,sizeof(char),100,f_iterations); 
       }
-      fwrite("\n",sizeof(char),1,f_roots);
-      fwrite("\n",sizeof(char),1,f_iterations);
-
       free(roots_results);
       free(iterations_results);
+      fwrite("\n",sizeof(char),1,f_roots);
+      fwrite("\n",sizeof(char),1,f_iterations);
     }
   }
 }
