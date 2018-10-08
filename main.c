@@ -69,7 +69,7 @@ void compute_exact_roots() {
   double angle = M_PI * 2.0 / expo;
   double complex * tmp_exact_roots = malloc(sizeof(double complex) * (expo + 1));
   for (size_t ix = 0; ix < expo; ++ix)
-    tmp_exact_roots[ix] = cos(angle*ix) + sin(angle*ix)*I;
+    tmp_exact_roots[ix] = cos(angle*ix)+sin(angle*ix)*I;
   tmp_exact_roots[expo] = 0;
   exact_roots = tmp_exact_roots;
 }
@@ -96,22 +96,26 @@ void compute_item(int item) {
     double complex z = -2 + ix*step + y_I;
     int done = 0;
     for (size_t jx = 0; done == 0; ++jx) {
-      for (size_t kx = 0; kx <= expo; ++kx)
-	if (cabs(z-exact_roots[kx]) < 1e-3) {
+      double abs_z_2 = creal(z)*creal(z) + cimag(z)*cimag(z);
+      for (size_t kx = 0; kx < expo; ++kx) {
+	//if (cabs(z-exact_roots[kx]) < 1e-3) {
+	if (abs_z_2 + 1 -2*(creal(z)*creal(exact_roots[kx])+cimag(z)*cimag(exact_roots[kx])) < 1e-6) {
 	  attr_result[ix] = kx;
 	  conv_result[ix] = jx;
 	  done = 1;
 	  break;
 	}
-      if (abs(creal(z)) > 1e10 || abs(cimag(z)) > 1e10) {
+      }
+      if (abs_z_2 < 1e-6 || abs(creal(z)) > 1e10 || abs(cimag(z)) > 1e10) {
 	attr_result[ix] = expo;
 	conv_result[ix] = jx;
-	done = 1;
+	break;
       }
       double complex z_d_1 = 1;
       for (size_t kx = 0; kx < expo-1; ++kx)
-	z_d_1 = z_d_1*z;
+	  z_d_1 = z_d_1*z;
       z = z*one_min_expo_inv + expo_inv/z_d_1;
+
     }
   }
   attractors[item] = attr_result;
@@ -177,3 +181,4 @@ void * write_main(void * args) {
     }
   }
 }
+
