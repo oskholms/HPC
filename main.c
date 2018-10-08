@@ -59,6 +59,8 @@ void main(int argc, char* argv[]) {
   }
 
   pthread_join(write_thread,NULL);
+  /*for (size_t ix = 0; ix < nmb_threads; ++ix)
+    pthread_join(compute_threads[ix],NULL);*/
   free(roots);
   free(iterations);
   free(exact_roots);
@@ -90,19 +92,11 @@ void compute_item(int item) {
   int * iterations_result = malloc(sizeof(int) * size);
   double step = 4.0 / (size-1);
   double complex y_I = (-2 + item*step)*I;
+  double exponent_inverse = 1.0/exponent;
   for (size_t ix = 0; ix < size; ++ix) {
     double complex z = -2 + ix*step + y_I;
     int done = 0;
-    if (z == 0) {
-      roots_result[ix] = exponent;
-      iterations_result[ix] = 0;
-      done = 1;
-    }
     for (size_t jx = 0; done == 0; ++jx) {
-      double complex z_d_1 = 1;
-      for (size_t kx = 0; kx < exponent-1; ++kx)
-	z_d_1 = z_d_1*z;
-      z = z - (z*z_d_1-1)/exponent/z_d_1;
       for (size_t kx = 0; kx <= exponent; ++kx)
 	if (cabs(z-exact_roots[kx]) < 1e-3) {
 	  roots_result[ix] = kx;
@@ -115,6 +109,10 @@ void compute_item(int item) {
 	iterations_result[ix] = jx;
 	done = 1;
       }
+      double complex z_d_1 = 1;
+      for (size_t kx = 0; kx < exponent-1; ++kx)
+	z_d_1 = z_d_1*z;
+      z = z - (z-1/z_d_1)*exponent_inverse;
     }
   }
   roots[item] = roots_result;
@@ -134,6 +132,11 @@ void * write_main(void * args) {
   sprintf(tmp_string,intro_string,size,size);
   fwrite(tmp_string,sizeof(char),100,f_roots);
   fwrite(tmp_string,sizeof(char),100,f_iterations);
+  char ** color = (char**) malloc(sizeof(char*)*exponent);
+  for (size_t ix = 0; ix <= exponent; ++ix) {
+    color[ix] = (char*) malloc(sizeof(char)*30);
+    sprintf(color[ix],template_string,ix/(double)exponent*255,255-ix/(double)exponent*255,0);
+  }
   for (size_t ix = 0; ix < size;) {
     pthread_mutex_lock(&item_done_mutex);
     if (item_done[ix] != 0) {
@@ -151,9 +154,8 @@ void * write_main(void * args) {
       int * iterations_results = iterations[ix];
       
       for (size_t jx = 0; jx < size; ++jx) {
-	int rcol = roots_results[jx]/(double)exponent*255;
-	sprintf(tmp_string,template_string,rcol,rcol,rcol);
-	fwrite(tmp_string,sizeof(char),100,f_roots);
+	int rcol = roots_results[jx];
+	fwrite(color[rcol],sizeof(char),100,f_roots);
 	int icol = roots_results[jx]/50.0*255;
 	sprintf(tmp_string,template_string,icol,icol,icol);
        	fwrite(tmp_string,sizeof(char),100,f_iterations); 
