@@ -14,13 +14,13 @@ void compute_item(int item);
 void * write_main(void * args);
 
 // Gloabal variables
-int ** roots;
-int ** iterations;
+int ** attractors;
+int ** convergences;
 double complex * exact_roots;
 char * item_done;
 int nmb_threads;
 int size;
-int exponent;
+int expo;
 pthread_mutex_t item_done_mutex;
 
 void main(int argc, char* argv[]) {
@@ -32,12 +32,12 @@ void main(int argc, char* argv[]) {
   }
   nmb_threads = atoi(&argv[1][2]);
   size = atoi(&argv[2][2]);
-  exponent = atoi(&argv[3][0]);
+  expo = atoi(&argv[3][0]);
   
   // Initialize global variables
   compute_exact_roots();
-  roots = (int**) malloc(sizeof(int*)*size);
-  iterations = (int**) malloc(sizeof(int*)*size);
+  attractors = (int**) malloc(sizeof(int*)*size);
+  convergences = (int**) malloc(sizeof(int*)*size);
   item_done = (char*) malloc(sizeof(char)*size);
 
   // Start compute threads
@@ -59,20 +59,18 @@ void main(int argc, char* argv[]) {
   }
 
   pthread_join(write_thread,NULL);
-  /*for (size_t ix = 0; ix < nmb_threads; ++ix)
-    pthread_join(compute_threads[ix],NULL);*/
-  free(roots);
-  free(iterations);
+  free(attractors);
+  free(convergences);
   free(exact_roots);
   free(item_done);
 }
 
 void compute_exact_roots() {
-  double angle = M_PI * 2.0 / exponent;
-  double complex * tmp_exact_roots = malloc(sizeof(double complex) * (exponent + 1));
-  for (size_t ix = 0; ix < exponent; ++ix)
+  double angle = M_PI * 2.0 / expo;
+  double complex * tmp_exact_roots = malloc(sizeof(double complex) * (expo + 1));
+  for (size_t ix = 0; ix < expo; ++ix)
     tmp_exact_roots[ix] = cos(angle*ix) + sin(angle*ix)*I;
-  tmp_exact_roots[exponent] = 0;
+  tmp_exact_roots[expo] = 0;
   exact_roots = tmp_exact_roots;
 }
 
@@ -88,61 +86,64 @@ void * compute_main(void * args) {
 }
 
 void compute_item(int item) {
-  int *      roots_result = malloc(sizeof(int) * size);
-  int * iterations_result = malloc(sizeof(int) * size);
+  int * attr_result = malloc(sizeof(int) * size);
+  int * conv_result = malloc(sizeof(int) * size);
   double step = 4.0 / (size-1);
   double complex y_I = (-2 + item*step)*I;
-  double exponent_inverse = 1.0/exponent;
+  double expo_inv = 1.0/expo;
+  double one_min_expo_inv = 1 - expo_inv;
   for (size_t ix = 0; ix < size; ++ix) {
     double complex z = -2 + ix*step + y_I;
     int done = 0;
     for (size_t jx = 0; done == 0; ++jx) {
-      for (size_t kx = 0; kx <= exponent; ++kx)
+      for (size_t kx = 0; kx <= expo; ++kx)
 	if (cabs(z-exact_roots[kx]) < 1e-3) {
-	  roots_result[ix] = kx;
-	  iterations_result[ix] = jx;
+	  attr_result[ix] = kx;
+	  conv_result[ix] = jx;
 	  done = 1;
 	  break;
 	}
       if (abs(creal(z)) > 1e10 || abs(cimag(z)) > 1e10) {
-	roots_result[ix] = exponent;
-	iterations_result[ix] = jx;
+	attr_result[ix] = expo;
+	conv_result[ix] = jx;
 	done = 1;
       }
       double complex z_d_1 = 1;
-      for (size_t kx = 0; kx < exponent-1; ++kx)
+      for (size_t kx = 0; kx < expo-1; ++kx)
 	z_d_1 = z_d_1*z;
-      z = z - (z-1/z_d_1)*exponent_inverse;
+      z = z*one_min_expo_inv + expo_inv/z_d_1;
     }
   }
-  roots[item] = roots_result;
-  iterations[item] = iterations_result;
+  attractors[item] = attr_result;
+  convergences[item] = conv_result;
 }
 
 void * write_main(void * args) {
   char * item_done_loc = calloc(size, sizeof(char));
-  struct timespec sleep_timespec = {.tv_sec = 0, .tv_nsec = 500};
-  char * intro_string = "P3 \n%d %d \n255 \n";
+  struct timespec sleep_timespec = {.tv_sec = 0, .tv_nsec = 100000};
+  char * intro_string = "P3\n%d %d\n255\n";
   char * template_string = "%3d %3d %3d ";
-  char tmp_string[30];
-  sprintf(tmp_string, "newton_convergence_x%d.ppm", exponent);
-  FILE * f_roots = fopen(tmp_string,"w+");
-  sprintf(tmp_string, "newton_attractors_x%d.ppm", exponent);
-  FILE * f_iterations = fopen(tmp_string,"w+");
+  char * tmp_string = (char*) malloc(sizeof(char)*30);
+  sprintf(tmp_string, "newton_attractors_x%d.ppm", expo);
+  FILE * f_attr = fopen(tmp_string,"w+");
+  sprintf(tmp_string, "newton_convergences_x%d.ppm", expo);
+  FILE * f_conv = fopen(tmp_string,"w+");
   sprintf(tmp_string,intro_string,size,size);
-  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_roots);
-  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_iterations);
-  char ** color = (char**) malloc(sizeof(char*)*exponent+1);
-  for (size_t ix = 0; ix <= exponent; ++ix) {
-    color[ix] = (char*) malloc(sizeof(char)*30);
-    sprintf(color[ix],template_string,(int)(ix/(double)exponent*255),(int)(255-ix/(double)exponent*255),0);
-    //printf(color[ix]);
+  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_attr);
+  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_conv);
+  char ** colors = (char**) malloc(sizeof(char*)*expo+1);
+  for (size_t ix = 0; ix <= expo; ++ix) {
+    colors[ix] = (char*) malloc(sizeof(char)*12);
+    int color1 = ix * 255.0/expo;
+    int color2 = 255 - color1;
+    int color3 = 127;
+    sprintf(colors[ix],template_string,color1,color2,color3);
   }
-  char ** gray = (char**) malloc(sizeof(char*)*50);
-  for (size_t ix = 0; ix < 50; ++ix) {
-    gray[ix] = (char*) malloc(sizeof(char)*100);
-    int col = 255 * ix / 49.0;
-    sprintf(gray[ix],template_string,col,col,col);
+  char ** grays = (char**) malloc(sizeof(char*)*52);
+  for (size_t ix = 0; ix <= 51; ++ix) {
+    grays[ix] = (char*) malloc(sizeof(char)*12);
+    int gray = 5 * ix;
+    sprintf(grays[ix],template_string,gray,gray,gray);
   }
   for (size_t ix = 0; ix < size;) {
     pthread_mutex_lock(&item_done_mutex);
@@ -157,23 +158,22 @@ void * write_main(void * args) {
     }
 
     for (; ix < size  && item_done_loc[ix] != 0; ++ix ) {
-      int * roots_results = roots[ix];
-      int * iterations_results = iterations[ix];
+      int * attr_results = attractors[ix];
+      int * conv_results = convergences[ix];
       
       for (size_t jx = 0; jx < size; ++jx) {
-	int rcol = roots_results[jx];
-	fwrite(color[rcol],sizeof(char),strlen(color[rcol]),f_roots);
-	int icol = iterations_results[jx];
-	if (icol > 49) {
-	  printf("Biggar than 49: %d\n",icol);
-	  icol = 49;
+	int attr_col = attr_results[jx];
+	fwrite(colors[attr_col],sizeof(char),strlen(colors[attr_col]),f_attr);
+	int conv_col = conv_results[jx];
+	if (conv_col > 51) {
+	  conv_col = 51;
 	}
-       	fwrite(gray[icol],sizeof(char),strlen(color[rcol]),f_iterations); 
+       	fwrite(grays[conv_col],sizeof(char),strlen(grays[conv_col]),f_conv); 
       }
-      free(roots_results);
-      free(iterations_results);
-      fwrite("\n",sizeof(char),1,f_roots);
-      fwrite("\n",sizeof(char),1,f_iterations);
+      free(attr_results);
+      free(conv_results);
+      fwrite("\n",sizeof(char),1,f_attr);
+      fwrite("\n",sizeof(char),1,f_conv);
     }
   }
 }
