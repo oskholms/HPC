@@ -130,12 +130,19 @@ void * write_main(void * args) {
   sprintf(tmp_string, "newton_attractors_x%d.ppm", exponent);
   FILE * f_iterations = fopen(tmp_string,"w+");
   sprintf(tmp_string,intro_string,size,size);
-  fwrite(tmp_string,sizeof(char),100,f_roots);
-  fwrite(tmp_string,sizeof(char),100,f_iterations);
-  char ** color = (char**) malloc(sizeof(char*)*exponent);
+  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_roots);
+  fwrite(tmp_string,sizeof(char),strlen(tmp_string),f_iterations);
+  char ** color = (char**) malloc(sizeof(char*)*exponent+1);
   for (size_t ix = 0; ix <= exponent; ++ix) {
     color[ix] = (char*) malloc(sizeof(char)*30);
-    sprintf(color[ix],template_string,ix/(double)exponent*255,255-ix/(double)exponent*255,0);
+    sprintf(color[ix],template_string,(int)(ix/(double)exponent*255),(int)(255-ix/(double)exponent*255),0);
+    //printf(color[ix]);
+  }
+  char ** gray = (char**) malloc(sizeof(char*)*50);
+  for (size_t ix = 0; ix < 50; ++ix) {
+    gray[ix] = (char*) malloc(sizeof(char)*100);
+    int col = 255 * ix / 49.0;
+    sprintf(gray[ix],template_string,col,col,col);
   }
   for (size_t ix = 0; ix < size;) {
     pthread_mutex_lock(&item_done_mutex);
@@ -155,10 +162,13 @@ void * write_main(void * args) {
       
       for (size_t jx = 0; jx < size; ++jx) {
 	int rcol = roots_results[jx];
-	fwrite(color[rcol],sizeof(char),100,f_roots);
-	int icol = roots_results[jx]/50.0*255;
-	sprintf(tmp_string,template_string,icol,icol,icol);
-       	fwrite(tmp_string,sizeof(char),100,f_iterations); 
+	fwrite(color[rcol],sizeof(char),strlen(color[rcol]),f_roots);
+	int icol = iterations_results[jx];
+	if (icol > 49) {
+	  printf("Biggar than 49: %d\n",icol);
+	  icol = 49;
+	}
+       	fwrite(gray[icol],sizeof(char),strlen(color[rcol]),f_iterations); 
       }
       free(roots_results);
       free(iterations_results);

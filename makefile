@@ -1,4 +1,6 @@
+FLAGS= -lm -Ofast -march=native -pthread
+
 .PHONY: all
 all: main
 main: main.c
-	gcc -Ofast -pthread -lm main.c -o main
+	gcc $(FLAGS) main.c -o main
